@@ -66,14 +66,15 @@ def render(bg_path: str, content: dict, data: dict, job_id: str) -> str:
     """
 
     # --------------------------------------------------
-    # LOAD BASE TEMPLATE
+    # LOAD BASE TEMPLATE (template2.png not found - using canvas size)
+    # TODO: Add template2.png to D:\automation-bitlance\Ai-agents\templates\
     # --------------------------------------------------
-    template_path = os.path.join(PROJECT_ROOT, "templates", "template2.png")
-    template = Image.open(template_path).convert("RGBA")
+    # template_path = os.path.join(PROJECT_ROOT, "templates", "template2.png")
+    # template = Image.open(template_path).convert("RGBA")
 
     bg = Image.open(bg_path).convert("RGBA")
 
-    W, H = template.size
+    W, H = CANVAS_SIZE  # Using default canvas size until template2.png is added
     canvas = Image.new("RGBA", (W, H), (255, 255, 255, 255))
 
     # --------------------------------------------------
@@ -96,7 +97,7 @@ def render(bg_path: str, content: dict, data: dict, job_id: str) -> str:
         )
 
     canvas = Image.alpha_composite(canvas, overlay)
-    canvas = Image.alpha_composite(canvas, template)
+    # canvas = Image.alpha_composite(canvas, template)  # Template not loaded
 
     draw = ImageDraw.Draw(canvas)
 

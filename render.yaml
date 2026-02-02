@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: ai-graphic-generator
+    runtime: docker
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /app/service-account.json
+      - key: PYTHONUNBUFFERED
+        value: "1"

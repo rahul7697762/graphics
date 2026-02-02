@@ -1,0 +1,17 @@
+{
+    "property_type": "Ultra Luxury Villa",
+    "location": "Lonavala, India",
+    "price": "₹12 Cr",
+    "builder": "Bitlance Estates",
+    "phone": "+91 98765 43210",
+    "email": "sales@bitlance.com",
+    "address": "Plot 45, Valley View Road",
+    "bhk": "6 BHK",
+    "amenities": [
+        "Private Infinity Pool",
+        "Home Automation",
+        "Golf Course View",
+        "Private Theater"
+    ],
+    "template_id": "template1"
+}

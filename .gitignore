@@ -13,7 +13,7 @@ venv/
 # Secrets & Credentials
 # ===============================
 service-account.json
-*.json
+.env
 .env.*
 
 # ===============================
@@ -21,14 +21,10 @@ service-account.json
 # ===============================
 outputs/
 generated/
-*.png
-*.jpg
-*.jpeg
 
 # ===============================
-# Assets (icons, logos, temp)
+# Temporary uploads
 # ===============================
-assets/
 uploads/
 
 # ===============================

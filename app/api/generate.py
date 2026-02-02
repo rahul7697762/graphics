@@ -26,7 +26,8 @@ def generate_poster(request: GenerateRequest):
         # --------------------------------------------
         bg_path = generate_background(
             image_model=models["image"],
-            property_type=request.property_type
+            property_type=request.property_type,
+            location=request.location
         )
 
         # --------------------------------------------
@@ -40,7 +41,7 @@ def generate_poster(request: GenerateRequest):
         # --------------------------------------------
         # 4. Pick template (random or user selected)
         # --------------------------------------------
-        template_fn = pick_template()
+        template_fn = pick_template(request.template_id)
 
         # --------------------------------------------
         # 5. Render poster
@@ -56,6 +57,7 @@ def generate_poster(request: GenerateRequest):
         # 6. Return response
         # --------------------------------------------
         return GenerateResponse(
+            success=True,
             status="success",
             image_url=output_path,
             template_used=template_fn.__name__

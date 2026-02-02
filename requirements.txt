@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+python-dotenv
+google-cloud-aiplatform>=1.38.0
+pillow
+numpy
+requests
