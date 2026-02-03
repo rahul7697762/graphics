@@ -63,10 +63,17 @@ def pick_template(template_id: str = None):
         # Resolve alias if provided (template1 -> classic, etc.)
         resolved_id = TEMPLATE_ALIASES.get(template_id, template_id)
         if resolved_id in TEMPLATES:
-            return TEMPLATES[resolved_id]["render"]
+            fn = TEMPLATES[resolved_id]["render"]
+            fn.__name__ = f"render_{resolved_id}"
+            return fn
     
     # Random selection
-    return random.choice(TEMPLATE_LIST)["render"]
+    choice = random.choice(TEMPLATE_LIST)
+    fn = choice["render"]
+    # Find key for choice
+    slug = next((k for k, v in TEMPLATES.items() if v == choice), "random")
+    fn.__name__ = f"render_{slug}"
+    return fn
 
 
 def get_template_info(template_id: str):
