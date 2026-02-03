@@ -48,9 +48,16 @@ def init_vertex():
     if cred_json:
         # Load from JSON string (Best for Render/Heroku)
         import json
-        info = json.loads(cred_json)
-        credentials = service_account.Credentials.from_service_account_info(info)
-        print("✅ Loaded credentials from GOOGLE_APPLICATION_CREDENTIALS_JSON")
+        try:
+            print(f"🔍 DEBUG: Creds JSON Length: {len(cred_json)}")
+            print(f"🔍 DEBUG: First 10 chars: '{cred_json[:10]}'")
+            info = json.loads(cred_json)
+            credentials = service_account.Credentials.from_service_account_info(info)
+            print("✅ Loaded credentials from GOOGLE_APPLICATION_CREDENTIALS_JSON")
+        except json.JSONDecodeError as e:
+            print(f"❌ JSON PARSE ERROR: {str(e)}")
+            print(f"❌ Raw Content (First 50 chars): {cred_json[:50]}...")
+            raise RuntimeError(f"Invalid JSON in GOOGLE_APPLICATION_CREDENTIALS_JSON: {str(e)}")
     else:
         # Load from file path (Local Dev)
         credentials = service_account.Credentials.from_service_account_file(cred_path)
