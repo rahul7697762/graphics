@@ -56,10 +56,15 @@ def generate_poster(request: GenerateRequest):
         # --------------------------------------------
         # 6. Return response
         # --------------------------------------------
+        import base64
+        with open(output_path, "rb") as img_file:
+            b64_string = base64.b64encode(img_file.read()).decode('utf-8')
+
         return GenerateResponse(
             success=True,
             status="success",
             image_url=output_path,
+            image_base64=b64_string,
             template_used=template_fn.__name__
         )
 

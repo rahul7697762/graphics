@@ -56,6 +56,10 @@ class GenerateResponse(BaseModel):
         ...,
         example='/outputs/poster_123.png'
     )
+    image_base64: Optional[str] = Field(
+        default=None,
+        description="Base64 encoded image content"
+    )
     template_used: str = Field(
         ...,
         example='template1.render'
