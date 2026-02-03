@@ -38,15 +38,23 @@ def init_vertex():
     project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
     location = os.getenv("GOOGLE_CLOUD_LOCATION")
     cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    cred_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 
-    if not all([project_id, location, cred_path]):
+    if not all([project_id, location]) or (not cred_path and not cred_json):
         raise RuntimeError(
-            "Missing Vertex AI environment variables"
+            "Missing Vertex AI environment variables. Need PROJECT, LOCATION, and either CREDENTIALS (path) or CREDENTIALS_JSON (content)"
         )
 
-    credentials = service_account.Credentials.from_service_account_file(
-        cred_path
-    )
+    if cred_json:
+        # Load from JSON string (Best for Render/Heroku)
+        import json
+        info = json.loads(cred_json)
+        credentials = service_account.Credentials.from_service_account_info(info)
+        print("✅ Loaded credentials from GOOGLE_APPLICATION_CREDENTIALS_JSON")
+    else:
+        # Load from file path (Local Dev)
+        credentials = service_account.Credentials.from_service_account_file(cred_path)
+        print(f"✅ Loaded credentials from file: {cred_path}")
 
     vertexai.init(
         project=project_id,
