@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.generate import router as generate_router
+from app.api.blog import router as blog_router
 
 # ==================================================
 # APP INITIALIZATION
@@ -30,6 +31,7 @@ app.add_middleware(
 # ==================================================
 
 app.include_router(generate_router, prefix="/api")
+app.include_router(blog_router, prefix="/api/blog")
 
 # ==================================================
 # HEALTH CHECK
