@@ -46,22 +46,28 @@ def init_vertex():
         )
 
     if cred_json:
-        # Load from JSON string (Best for Render/Heroku)
+        # Preferred: Load from JSON string env var (GOOGLE_APPLICATION_CREDENTIALS_JSON)
         import json
         try:
-            print(f"🔍 DEBUG: Creds JSON Length: {len(cred_json)}")
-            print(f"🔍 DEBUG: First 10 chars: '{cred_json[:10]}'")
             info = json.loads(cred_json)
             credentials = service_account.Credentials.from_service_account_info(info)
             print("✅ Loaded credentials from GOOGLE_APPLICATION_CREDENTIALS_JSON")
         except json.JSONDecodeError as e:
-            print(f"❌ JSON PARSE ERROR: {str(e)}")
-            print(f"❌ Raw Content (First 50 chars): {cred_json[:50]}...")
             raise RuntimeError(f"Invalid JSON in GOOGLE_APPLICATION_CREDENTIALS_JSON: {str(e)}")
+    elif cred_path and cred_path.strip().startswith("{"):
+        # Fallback: GOOGLE_APPLICATION_CREDENTIALS contains raw JSON (not a file path)
+        import json
+        try:
+            info = json.loads(cred_path)
+            credentials = service_account.Credentials.from_service_account_info(info)
+            print("✅ Loaded credentials from GOOGLE_APPLICATION_CREDENTIALS (JSON content)")
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"Invalid JSON in GOOGLE_APPLICATION_CREDENTIALS: {str(e)}")
     else:
-        # Load from file path (Local Dev)
+        # Local dev: GOOGLE_APPLICATION_CREDENTIALS is a file path
         credentials = service_account.Credentials.from_service_account_file(cred_path)
         print(f"✅ Loaded credentials from file: {cred_path}")
+
 
     vertexai.init(
         project=project_id,
