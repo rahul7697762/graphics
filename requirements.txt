@@ -2,6 +2,8 @@ fastapi
 uvicorn
 python-dotenv
 google-cloud-aiplatform>=1.38.0
+google-generativeai>=0.8.0
+google-genai
 pillow
 numpy
 requests

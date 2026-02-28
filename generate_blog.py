@@ -77,7 +77,7 @@ class PerplexityService:
 
             ⚠️ Important: 
             - Do not use [1], [2] citation numbers. 
-            - Insert valid external references as clickable Markdown links if relevant.
+            - STRICT RULE: Do NOT add any external links, citations, or references to outside websites. No external URLs are permitted anywhere in the content.
             - {"Continue strictly from previous text: " + blog_text[-100:] if blog_text else "Start from the beginning."}
             """
             
@@ -151,7 +151,7 @@ class OpenAIService:
 
         ⚠️ Important: 
         - Do not use [1], [2] citation numbers. 
-        - Insert valid external references as clickable Markdown links if relevant.
+        - STRICT RULE: Do NOT add any external links, citations, or references to outside websites. No external URLs are permitted anywhere in the content.
         """
         blog_text = self._call_chat(prompt, "You are an expert content writer.")
         word_count = len(blog_text.split())

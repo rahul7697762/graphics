@@ -1,6 +1,7 @@
 """
 Blog AI Service
-Handles all AI-powered generation via Perplexity (sonar-pro) and OpenAI (GPT-4o / DALL-E 3).
+Handles all AI-powered generation via Perplexity (sonar-pro), OpenAI fallback (GPT-4o),
+and Google Gemini Imagen 3 for image generation.
 Ported from Node.js: perplexityService.js + openAIService.js
 """
 
@@ -11,11 +12,11 @@ from typing import Optional
 
 
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_API_KEY    = os.getenv("OPENAI_API_KEY")
+GEMINI_API_KEY    = os.getenv("GEMINI_API_KEY")
 
 PERPLEXITY_BASE_URL = "https://api.perplexity.ai/chat/completions"
-OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
-OPENAI_IMAGE_URL = "https://api.openai.com/v1/images/generations"
+OPENAI_CHAT_URL     = "https://api.openai.com/v1/chat/completions"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -125,17 +126,21 @@ def generate_blog_content(
     interlink_instructions = ""
     if interlinks:
         links_str = "\n".join(
-            [f'- Link to "{lnk["title"]}" ({lnk["link"]})' for lnk in interlinks]
+            [f'- "{lnk["title"]}" → {lnk["link"]}' for lnk in interlinks]
         )
         interlink_instructions = f"""
-        MANDATORY INTERLINKING RULES:
-        1. You MUST include links to the following articles within the content.
-        2. Do NOT list them at the end. Do NOT show the raw URL.
-        3. You MUST use relevant keywords or phrases as the anchor text for the link.
-        4. The link must flow naturally in the sentence.
+        ══ MANDATORY INTERNAL LINKING (STRICT) ══
+        You MUST naturally hyperlink to ALL of the following pages somewhere in the article body.
+        Rules:
+        1. Embed each link as a Markdown hyperlink: [anchor text](URL) — use a relevant keyword as anchor, NOT the raw URL.
+        2. Place each link inside a sentence in a paragraph (NOT in a heading, NOT in a list at the end).
+        3. Example of correct format: "...similar to what we discussed in our guide on [AI lead qualification](https://example.com/page)..."
+        4. Do NOT add any other external links. These are the ONLY links allowed.
+        5. Failure to include ALL links below will result in rejection.
 
-        Articles to integrate:
+        Links to embed:
         {links_str}
+        ═════════════════════════════════════════
         """
 
     while word_count < length_num and current_attempts < max_attempts:
@@ -164,7 +169,7 @@ def generate_blog_content(
 
         ⚠️ Important:
         - Do not use [1], [2] citation numbers.
-        - Insert valid external references as clickable Markdown links if relevant.
+        - STRICT RULE: Do NOT add any external links, citations, or references to outside websites. {"ONLY use the internal links listed above from the provided website." if interlinks else "No external URLs are permitted anywhere in the content."}
         - {continuation}
 
         Output valid Markdown.
@@ -259,17 +264,21 @@ def openai_generate_blog_content(
     interlink_instructions = ""
     if interlinks:
         links_str = "\n".join(
-            [f'- Link to "{lnk["title"]}" ({lnk["link"]})' for lnk in interlinks]
+            [f'- "{lnk["title"]}" → {lnk["link"]}' for lnk in interlinks]
         )
         interlink_instructions = f"""
-        MANDATORY INTERLINKING RULES:
-        1. You MUST include links to the following articles within the content.
-        2. Do NOT list them at the end. Do NOT show the raw URL.
-        3. You MUST use relevant keywords or phrases as the anchor text for the link.
-        4. The link must flow naturally in the sentence.
+        ══ MANDATORY INTERNAL LINKING (STRICT) ══
+        You MUST naturally hyperlink to ALL of the following pages somewhere in the article body.
+        Rules:
+        1. Embed each link as a Markdown hyperlink: [anchor text](URL) — use a relevant keyword as anchor, NOT the raw URL.
+        2. Place each link inside a sentence in a paragraph (NOT in a heading, NOT in a list at the end).
+        3. Example of correct format: "...similar to what we discussed in our guide on [AI lead qualification](https://example.com/page)..."
+        4. Do NOT add any other external links. These are the ONLY links allowed.
+        5. Failure to include ALL links below will result in rejection.
 
-        Articles to integrate:
+        Links to embed:
         {links_str}
+        ═════════════════════════════════════════
         """
 
     prompt = f"""
@@ -290,7 +299,7 @@ def openai_generate_blog_content(
 
     ⚠️ Important:
     - Do not use [1], [2] citation numbers.
-    - Insert valid external references as clickable Markdown links if relevant.
+    - STRICT RULE: Do NOT add any external links, citations, or references to outside websites. {"ONLY use the internal links listed above from the provided website." if interlinks else "No external URLs are permitted anywhere in the content."}
     """
 
     blog_text = _openai_chat_call(prompt, "You are an expert content writer.", max_tokens=4000)
@@ -298,38 +307,99 @@ def openai_generate_blog_content(
 
 
 def generate_image(topic: str, image_text: str) -> str:
-    """Generate a blog header image via DALL-E 3 and return the image URL."""
-    if not OPENAI_API_KEY:
-        raise RuntimeError("OPENAI_API_KEY is not set")
+    """
+    Generate a blog header image.
+    Strategy:
+      1. Vertex AI Imagen 3 via ImageGenerationModel.from_pretrained (uses service account)
+         → returns base64 data URI
+      2. Fall back to OpenAI DALL-E 3 → returns image URL string
+      3. Fall back to a solid-colour placeholder base64 PNG
+    """
+    import base64
+    import io
 
     prompt = (
-        f'Create a professional blog header image about: {topic}.\n\n'
-        f'VISUAL REQUIREMENTS:\n'
-        f'- High-quality, modern design with relevant visual elements\n'
-        f'- Blog header format (landscape orientation, 16:9 ratio)\n'
-        f'- Clean, professional appearance suitable for publication\n\n'
-        f'TEXT OVERLAY REQUIREMENTS:\n'
-        f'- Include the exact text: "{image_text}"\n'
-        f'- Text must be spelled EXACTLY as written above, character by character\n'
-        f'- Place text prominently, readable, and well-positioned on the image\n'
-        f'- Use clean, modern typography (sans-serif font recommended)\n\n'
-        f'CRITICAL: The text "{image_text}" must appear exactly as written, with perfect spelling and clear visibility.'
+        f"Create a professional blog header image about: {topic}. "
+        f"Visual requirements: high-quality modern design, landscape orientation (16:9), "
+        f"clean professional appearance suitable for blog publication. "
+        f"Include the short headline text '{image_text}' prominently on the image with "
+        f"clean sans-serif typography. No watermarks, no borders."
     )
 
-    headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": "dall-e-3",
-        "prompt": prompt,
-        "n": 1,
-        "size": "1792x1024",
-        "response_format": "url",
-    }
-    res = requests.post(OPENAI_IMAGE_URL, headers=headers, json=payload, timeout=120)
-    res.raise_for_status()
-    return res.json()["data"][0]["url"]
+    # ── 1. Vertex AI Imagen 3 (via service account) ───────────────────────────
+    try:
+        import vertexai
+        from vertexai.preview.vision_models import ImageGenerationModel
+        from google.oauth2 import service_account
+
+        project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+        location   = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+        cred_path  = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        cred_json  = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+
+        if not project_id:
+            raise RuntimeError("GOOGLE_CLOUD_PROJECT not set")
+
+        # Load credentials (JSON string takes precedence over file path)
+        if cred_json:
+            import json as _json
+            credentials = service_account.Credentials.from_service_account_info(
+                _json.loads(cred_json)
+            )
+        elif cred_path and not cred_path.strip().startswith("{"):
+            credentials = service_account.Credentials.from_service_account_file(cred_path)
+        else:
+            credentials = None  # let ADC handle it
+
+        vertexai.init(project=project_id, location=location, credentials=credentials)
+
+        image_model = ImageGenerationModel.from_pretrained("imagen-3.0-generate-002")
+        response = image_model.generate_images(
+            prompt=prompt,
+            number_of_images=1,
+            aspect_ratio="16:9",
+        )
+
+        if response.images:
+            img_bytes = response.images[0]._image_bytes
+            b64 = base64.b64encode(img_bytes).decode("utf-8")
+            print(f"Image generated via Vertex AI Imagen 3 for: {topic}")
+            return f"data:image/png;base64,{b64}"
+        else:
+            raise RuntimeError("Vertex AI Imagen returned no images")
+
+    except Exception as e:
+        print(f"Vertex AI Imagen failed: {type(e).__name__}: {e}. Trying OpenAI DALL-E...")
+
+    # ── 2. Fall back to OpenAI DALL-E 3 ──────────────────────────────────────
+    if OPENAI_API_KEY:
+        try:
+            dalle_prompt = (
+                f"Professional blog header image about: {topic}. "
+                f"Modern landscape design, clean typography showing '{image_text}', "
+                f"no watermarks, suitable for publication."
+            )
+            res = requests.post(
+                "https://api.openai.com/v1/images/generations",
+                headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
+                json={"model": "dall-e-3", "prompt": dalle_prompt, "n": 1, "size": "1792x1024", "response_format": "url"},
+                timeout=60,
+            )
+            res.raise_for_status()
+            url = res.json()["data"][0]["url"]
+            print(f"Image generated via OpenAI DALL-E 3 for: {topic}")
+            return url
+        except Exception as e:
+            print(f"OpenAI DALL-E failed: {type(e).__name__}: {e}")
+
+    # ── 3. Solid-colour placeholder ───────────────────────────────────────────
+    print("All image generation methods failed. Returning placeholder.")
+    from PIL import Image as _PILImage
+    img = _PILImage.new("RGB", (1280, 720), (30, 58, 138))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    return f"data:image/png;base64,{b64}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

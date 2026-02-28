@@ -38,6 +38,7 @@ class GenerateBlogRequest(BaseModel):
     image_option: Optional[str] = "auto"    # auto | custom | none
     custom_image_url: Optional[str] = None
     wp_url: Optional[str] = None            # website URL for interlinking
+    interlinks: Optional[list] = None       # pre-built interlinks from Node.js [{title, link}]
 
 
 LENGTH_MAPPING = {
@@ -78,8 +79,12 @@ def generate_blog(body: GenerateBlogRequest):
             keywords = ai.openai_generate_keywords(topic)
 
     # ── 3. WordPress interlinks (optional) ────────────────────────────────────
-    interlinks = []
-    if body.wp_url:
+    # Use pre-built interlinks if provided by Node.js (e.g. from Supabase articles)
+    if body.interlinks:
+        interlinks = body.interlinks
+        print(f"Using {len(interlinks)} pre-built interlinks from server")
+    elif body.wp_url:
+        interlinks = []
         try:
             base_url = body.wp_url.rstrip("/")
             if not base_url.startswith("http"):
@@ -87,13 +92,22 @@ def generate_blog(body: GenerateBlogRequest):
             wp_res = _requests.get(
                 f"{base_url}/wp-json/wp/v2/posts?per_page=10", timeout=10
             )
-            if wp_res.status_code == 200:
-                interlinks = [
-                    {"title": p["title"]["rendered"], "link": p["link"]}
-                    for p in wp_res.json()
-                ]
+            content_type = wp_res.headers.get("Content-Type", "")
+            if wp_res.status_code == 200 and "application/json" in content_type:
+                posts = wp_res.json()
+                if isinstance(posts, list):
+                    interlinks = [
+                        {"title": p["title"]["rendered"], "link": p["link"]}
+                        for p in posts
+                        if "title" in p and "link" in p
+                    ]
+                    print(f"WP interlinks fetched: {len(interlinks)} posts from {base_url}")
+            else:
+                print(f"WP interlinks skipped: {base_url} returned status={wp_res.status_code}, content-type={content_type!r} (not a WordPress REST API endpoint)")
         except Exception as e:
-            print(f"WP interlinks fetch failed: {e}")
+            print(f"WP interlinks fetch failed for {body.wp_url}: {type(e).__name__}: {e}")
+    else:
+        interlinks = []
 
     # ── 4. Content generation ─────────────────────────────────────────────────
     length_num = LENGTH_MAPPING.get(body.length, 500)
