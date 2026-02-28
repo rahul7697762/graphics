@@ -183,14 +183,26 @@ def generate_blog_content(
 
 
 def generate_seo_title(blog_text: str, topic: str) -> str:
-    """Generate an SEO-optimised title (max 60 chars) from blog content."""
+    """Generate an SEO-optimised title from blog content."""
+    import re
     prompt = (
-        f"Based on this blog content, generate the best SEO-friendly title (max 60 characters) "
-        f"that is catchy and optimized for search engines:\n{blog_text[:1200]}\n"
-        f"Topic: {topic}\nReturn only the title, nothing else."
+        f"Based on this blog content, generate ONE concise, catchy, SEO-friendly title for the blog post.\n"
+        f"Topic: {topic}\n\n"
+        f"Content preview:\n{blog_text[:1200]}\n\n"
+        f"Rules:\n"
+        f"- Return ONLY the title itself — no quotes, no explanations, no extra text.\n"
+        f"- Do NOT include character counts, numbers in parentheses, or any annotation like '(37 chars)' or '[60]'.\n"
+        f"- Do NOT start with numbers or numbering (e.g. '1.', '10 ways...').\n"
+        f"- Keep it under 65 characters naturally. Do not mention the length.\n"
+        f"- Make it compelling and keyword-rich for search engines."
     )
     try:
-        return _perplexity_call(prompt, "You are an expert SEO copywriter.", max_tokens=50).strip()
+        raw = _perplexity_call(prompt, "You are an expert SEO copywriter.", max_tokens=60).strip()
+        # Strip any (xx chars) / [xx chars] / (xx characters) annotations the model may add
+        title = re.sub(r'[\(\[]\d+\s*(?:chars?|characters?)[\)\]]', '', raw, flags=re.IGNORECASE).strip()
+        # Strip surrounding quotes if the model wrapped the title
+        title = title.strip('"\'')
+        return title if title else topic
     except Exception as e:
         print(f"Perplexity SEO title error: {e}")
         return topic
