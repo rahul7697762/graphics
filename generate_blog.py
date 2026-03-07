@@ -161,20 +161,16 @@ class OpenAIService:
         if not self.api_key:
             raise Exception("OPENAI_API_KEY is not set")
 
-        prompt = f"""Create a professional blog header image about: {topic}.
+        prompt = f"""Create a professional, text-free blog header image about: {topic}.
 
 VISUAL REQUIREMENTS:
 - High-quality, modern design with relevant visual elements
 - Blog header format (landscape orientation, 16:9 ratio)
 - Clean, professional appearance suitable for publication
 
-TEXT OVERLAY REQUIREMENTS:
-- Include the exact text: "{image_text}"
-- Text must be spelled EXACTLY as written above, character by character
-- Place text prominently, readable, and well-positioned on the image
-- Use clean, modern typography (sans-serif font recommended)
-
-CRITICAL: The text "{image_text}" must appear exactly as written, with perfect spelling and clear visibility."""
+CRITICAL CONSTRAINT: 
+- Do NOT include ANY text, words, letters, watermarks, signs, logos, or typography anywhere in the image.
+- The image must be 100% text-free."""
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",

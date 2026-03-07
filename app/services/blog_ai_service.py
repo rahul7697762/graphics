@@ -331,11 +331,10 @@ def generate_image(topic: str, image_text: str) -> str:
     import io
 
     prompt = (
-        f"Create a professional blog header image about: {topic}. "
+        f"Create a professional, text-free blog header image about: {topic}. "
         f"Visual requirements: high-quality modern design, landscape orientation (16:9), "
         f"clean professional appearance suitable for blog publication. "
-        f"Include the short headline text '{image_text}' prominently on the image with "
-        f"clean sans-serif typography. No watermarks, no borders."
+        f"CRITICAL: Do not include ANY text, words, letters, watermarks, signs, logos, or typography anywhere in the image."
     )
 
     # ── 1. Vertex AI Imagen 3 (via service account) ───────────────────────────
@@ -387,9 +386,9 @@ def generate_image(topic: str, image_text: str) -> str:
     if OPENAI_API_KEY:
         try:
             dalle_prompt = (
-                f"Professional blog header image about: {topic}. "
-                f"Modern landscape design, clean typography showing '{image_text}', "
-                f"no watermarks, suitable for publication."
+                f"Professional, text-free blog header image about: {topic}. "
+                f"Modern landscape design, clean and photorealistic. "
+                f"CRITICAL: No text, no words, no letters, no typography, no watermarks, no signs, no logos."
             )
             res = requests.post(
                 "https://api.openai.com/v1/images/generations",
