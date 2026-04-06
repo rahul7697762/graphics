@@ -37,7 +37,8 @@ class GenerateBlogRequest(BaseModel):
     audience: Optional[str] = "General Public"
     image_option: Optional[str] = "auto"    # auto | custom | none
     custom_image_url: Optional[str] = None
-    wp_url: Optional[str] = None            # website URL for interlinking
+    wp_url: Optional[str] = None            # website URL for interlinking (embedded in content)
+    wp_api_url: Optional[str] = None        # actual WordPress site URL for REST API fetching (may differ from wp_url)
     interlinks: Optional[list] = None       # pre-built interlinks from Node.js [{title, link}]
 
 
@@ -83,14 +84,14 @@ def generate_blog(body: GenerateBlogRequest):
     if body.interlinks:
         interlinks = body.interlinks
         print(f"Using {len(interlinks)} pre-built interlinks from server")
-    elif body.wp_url:
+    elif body.wp_api_url or body.wp_url:
         interlinks = []
         try:
-            base_url = body.wp_url.rstrip("/")
-            if not base_url.startswith("http"):
-                base_url = f"https://{base_url}"
+            api_base = (body.wp_api_url or body.wp_url).rstrip("/")
+            if not api_base.startswith("http"):
+                api_base = f"https://{api_base}"
             wp_res = _requests.get(
-                f"{base_url}/wp-json/wp/v2/posts?per_page=10", timeout=10
+                f"{api_base}/wp-json/wp/v2/posts?per_page=10", timeout=10
             )
             content_type = wp_res.headers.get("Content-Type", "")
             if wp_res.status_code == 200 and "application/json" in content_type:
@@ -101,11 +102,11 @@ def generate_blog(body: GenerateBlogRequest):
                         for p in posts
                         if "title" in p and "link" in p
                     ]
-                    print(f"WP interlinks fetched: {len(interlinks)} posts from {base_url}")
+                    print(f"WP interlinks fetched: {len(interlinks)} posts from {api_base}")
             else:
-                print(f"WP interlinks skipped: {base_url} returned status={wp_res.status_code}, content-type={content_type!r} (not a WordPress REST API endpoint)")
+                print(f"WP interlinks skipped: {api_base} is not a WordPress REST API endpoint")
         except Exception as e:
-            print(f"WP interlinks fetch failed for {body.wp_url}: {type(e).__name__}: {e}")
+            print(f"WP interlinks fetch failed for {api_base}: {type(e).__name__}: {e}")
     else:
         interlinks = []
 
