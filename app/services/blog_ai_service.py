@@ -3,6 +3,10 @@ Blog AI Service
 Handles all AI-powered generation via Perplexity (sonar-pro), OpenAI fallback (GPT-4o),
 and Google Gemini Imagen 3 for image generation.
 Ported from Node.js: perplexityService.js + openAIService.js
+
+Research tasks (topic discovery, keyword research, plagiarism checking) are
+handled by LangChain SERP tools (serp_tools.py) backed by SerpAPI.
+Perplexity / OpenAI remain as fallback when SERP_API_KEY is not set.
 """
 
 import os
@@ -14,6 +18,18 @@ from typing import Optional
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 OPENAI_API_KEY    = os.getenv("OPENAI_API_KEY")
 GEMINI_API_KEY    = os.getenv("GEMINI_API_KEY")
+
+# Import SERP tools — will be None if the module fails to load
+try:
+    from app.services.serp_tools import (
+        trending_topics_tool,
+        keyword_research_tool,
+        plagiarism_check_tool,
+    )
+    _SERP_AVAILABLE = bool(os.getenv("SERP_API_KEY"))
+except Exception as _serp_import_err:  # pragma: no cover
+    print(f"serp_tools import failed, SERP disabled: {_serp_import_err}")
+    _SERP_AVAILABLE = False
 
 PERPLEXITY_BASE_URL = "https://api.perplexity.ai/chat/completions"
 OPENAI_CHAT_URL     = "https://api.openai.com/v1/chat/completions"
@@ -76,8 +92,21 @@ def _openai_chat_call(user_prompt: str, system_msg: str = "You are an expert.", 
 def generate_title_and_keywords(industry: str) -> dict:
     """
     Auto-generate a blog topic + keyword list for a given industry.
+    Uses SerpAPI (real Google data) when SERP_API_KEY is set,
+    falls back to Perplexity sonar-pro otherwise.
     Returns: {"topic": str, "keywords": str}
     """
+    if _SERP_AVAILABLE:
+        try:
+            result = trending_topics_tool.run(industry)
+            # tool returns a dict; BaseTool.run may stringify it
+            if isinstance(result, str):
+                result = json.loads(result)
+            print(f"generate_title_and_keywords: used SerpAPI for '{industry}'")
+            return result
+        except Exception as e:
+            print(f"SerpAPI trending topics failed, falling back to Perplexity: {e}")
+
     prompt = (
         f'Act as an SEO expert. For the industry "{industry}", suggest a high-potential, '
         f'trending blog post Topic (Title) and a list of 5 relevant Keywords that would rank well.\n'
@@ -97,7 +126,19 @@ def generate_title_and_keywords(industry: str) -> dict:
 
 
 def generate_keywords(topic: str) -> str:
-    """Return a comma-separated list of SEO keywords for the given topic."""
+    """
+    Return a comma-separated list of SEO keywords for the given topic.
+    Uses SerpAPI (real related searches + PAA) when SERP_API_KEY is set,
+    falls back to Perplexity sonar-pro otherwise.
+    """
+    if _SERP_AVAILABLE:
+        try:
+            result = keyword_research_tool.run(topic)
+            print(f"generate_keywords: used SerpAPI for '{topic}'")
+            return result
+        except Exception as e:
+            print(f"SerpAPI keyword research failed, falling back to Perplexity: {e}")
+
     prompt = f'Generate relevant keywords for "{topic}" as comma-separated list.'
     return _perplexity_call(prompt, "You are an SEO expert.", max_tokens=500)
 
@@ -209,9 +250,21 @@ def generate_seo_title(blog_text: str, topic: str) -> str:
 
 
 def check_plagiarism(blog_text: str) -> str:
-    """Check plagiarism using Perplexity. Returns a human-readable result string."""
+    """
+    Check plagiarism. Returns a human-readable result string.
+    Uses SerpAPI (real Google exact-phrase search) when SERP_API_KEY is set,
+    falls back to Perplexity sonar-pro otherwise.
+    """
     if not blog_text or not blog_text.strip():
         return "Plagiarism check skipped - empty content"
+
+    if _SERP_AVAILABLE:
+        try:
+            result = plagiarism_check_tool.run(blog_text)
+            print("check_plagiarism: used SerpAPI exact-phrase search")
+            return result
+        except Exception as e:
+            print(f"SerpAPI plagiarism check failed, falling back to Perplexity: {e}")
 
     prompt = (
         f'Check for plagiarism in this article. Reply "No plagiarism detected" if original, '
