@@ -156,7 +156,6 @@ def generate_blog_content(
     length_num: int,
     interlinks: Optional[list] = None,
     max_attempts: int = 3,
-    model_variant: str = "A",  # A=Perplexity sonar-pro, B=OpenAI GPT-4o (A/B test)
 ) -> dict:
     """
     Generate full blog content using Perplexity sonar-pro.
@@ -248,17 +247,12 @@ def generate_blog_content(
         Output clean, valid Markdown only. No preamble, no meta-commentary.
         """
 
-        if model_variant == "B":
-            # A/B variant B: Perplexity sonar (lighter model)
-            new_content = _perplexity_call(prompt, "You are an expert SEO content writer.", max_tokens=6000, model="sonar")
-        else:
-            # A/B variant A (control): Perplexity sonar-pro
-            new_content = _perplexity_call(prompt, "You are an expert SEO content writer.", max_tokens=6000)
+        new_content = _perplexity_call(prompt, "You are an expert SEO content writer.", max_tokens=6000)
 
         blog_text += "\n\n" + new_content
         word_count = len(blog_text.split())
 
-    return {"blogText": blog_text.strip(), "wordCount": word_count, "modelVariant": model_variant}
+    return {"blogText": blog_text.strip(), "wordCount": word_count}
 
 
 def generate_seo_title(blog_text: str, topic: str) -> str:

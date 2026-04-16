@@ -19,7 +19,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.services import blog_ai_service as ai
-from app.services.ab_test_service import assign_variant, variant_label
 
 router = APIRouter()
 
@@ -111,19 +110,15 @@ def generate_blog(body: GenerateBlogRequest):
     else:
         interlinks = []
 
-    # ── 4. A/B variant assignment (internal only — not exposed to client) ─────
-    ab_variant = assign_variant(topic)
-    print(f"A/B test content_model_v1: variant={ab_variant} ({variant_label(ab_variant)}) for topic='{topic}'")
-
-    # ── 5. Content generation ─────────────────────────────────────────────────
+    # ── 4. Content generation ─────────────────────────────────────────────────
     length_num = LENGTH_MAPPING.get(body.length, 500)
     try:
         content_result = ai.generate_blog_content(
             topic, keywords, body.language, body.audience, body.style,
-            length_num, interlinks, model_variant=ab_variant
+            length_num, interlinks
         )
     except Exception as e:
-        print(f"Content gen failed (variant={ab_variant}), falling back to OpenAI: {e}")
+        print(f"Content gen failed, falling back to OpenAI: {e}")
         content_result = ai.openai_generate_blog_content(
             topic, keywords, body.language, body.audience, body.style,
             length_num, interlinks
