@@ -39,8 +39,8 @@ OPENAI_CHAT_URL     = "https://api.openai.com/v1/chat/completions"
 # INTERNAL HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _perplexity_call(user_prompt: str, system_msg: str = "You are an expert.", max_tokens: int = 4000) -> str:
-    """Make a single call to Perplexity sonar-pro and return the text content."""
+def _perplexity_call(user_prompt: str, system_msg: str = "You are an expert.", max_tokens: int = 4000, model: str = "sonar-pro") -> str:
+    """Make a single call to Perplexity and return the text content."""
     if not PERPLEXITY_API_KEY:
         raise RuntimeError("PERPLEXITY_API_KEY is not set")
 
@@ -49,7 +49,7 @@ def _perplexity_call(user_prompt: str, system_msg: str = "You are an expert.", m
         "Content-Type": "application/json",
     }
     payload = {
-        "model": "sonar-pro",
+        "model": model,
         "messages": [
             {"role": "system", "content": system_msg},
             {"role": "user", "content": user_prompt},
@@ -139,8 +139,12 @@ def generate_keywords(topic: str) -> str:
         except Exception as e:
             print(f"SerpAPI keyword research failed, falling back to Perplexity: {e}")
 
-    prompt = f'Generate relevant keywords for "{topic}" as comma-separated list.'
-    return _perplexity_call(prompt, "You are an SEO expert.", max_tokens=500)
+    prompt = (
+        f'You are an SEO keyword research expert. For the topic "{topic}", generate 8–12 high-value keywords.\n'
+        f'Include: 1 primary keyword (exact match), 3–4 long-tail variations (3+ words), 2–3 LSI/semantic keywords, 1–2 question-based keywords (e.g. "how to...", "what is...").\n'
+        f'Return ONLY a comma-separated list of keywords. No explanations, no numbering, no headers.'
+    )
+    return _perplexity_call(prompt, "You are an SEO expert.", max_tokens=200)
 
 
 def generate_blog_content(
@@ -152,6 +156,7 @@ def generate_blog_content(
     length_num: int,
     interlinks: Optional[list] = None,
     max_attempts: int = 3,
+    model_variant: str = "A",  # A=Perplexity sonar-pro, B=OpenAI GPT-4o (A/B test)
 ) -> dict:
     """
     Generate full blog content using Perplexity sonar-pro.
@@ -192,50 +197,85 @@ def generate_blog_content(
             else "Start from the beginning."
         )
 
+        primary_keyword = keywords.split(",")[0].strip() if keywords else topic
+
         prompt = f"""
-        You are a professional human blogger who writes helpful, experience-driven real estate articles in first person.
-        Write an engaging blog for {audience} in {language} on "{topic}".
+        You are an expert SEO content writer and professional blogger. Your goal is to write a comprehensive, high-ranking blog post that dominates search engine results pages (SERPs).
 
-        Keywords to include: {keywords or "none"}.
-        Style: {style}.
-        Minimum Words: {length_num}.
+        TOPIC: "{topic}"
+        PRIMARY KEYWORD: "{primary_keyword}"
+        ALL KEYWORDS TO USE: {keywords or "none"}
+        TARGET AUDIENCE: {audience}
+        LANGUAGE: {language}
+        WRITING STYLE: {style}
+        MINIMUM WORD COUNT: {length_num}
 
-        CONTENT REQUIREMENTS:
-        - Write in first person, sharing real-experience style insights.
-        - Tone: friendly, conversational, easy to understand. Avoid jargon.
-        - Structure: Hooking Introduction, 4–6 main sections, Conclusion with CTA.
-        - Use Markdown format: ## for main sections, ### for subsections, **bold**, *italic*.
+        ══ SEO STRUCTURE REQUIREMENTS ══
+        Use this exact heading hierarchy:
+        # [H1: Include primary keyword near the beginning — this is the page title]
+        ## [H2: Main section headings — include keyword variations]
+        ### [H3: Subsection headings — include LSI keywords]
+
+        MANDATORY ARTICLE STRUCTURE:
+        1. **H1 Title** — Primary keyword within first 5 words
+        2. **Intro paragraph (100–150 words)** — Include the primary keyword in the very first sentence. Hook the reader with a compelling question or statistic. Briefly state what the reader will learn.
+        3. **4–6 H2 sections** — Each covering a distinct, valuable subtopic. Begin each section with a keyword-rich sentence.
+        4. **FAQ Section (H2: "Frequently Asked Questions")** — Add 3–5 Q&A pairs targeting "People Also Ask" queries related to "{topic}". Format: ### Question\\n Answer paragraph.
+        5. **Conclusion with CTA (H2: "Final Thoughts" or "Conclusion")** — Summarise key takeaways, restate the primary keyword, and end with a clear call-to-action.
+
+        ══ KEYWORD PLACEMENT RULES (CRITICAL FOR SEO) ══
+        - Primary keyword must appear in: the H1 title, first paragraph (within first 100 words), at least 2 H2 headings, and the conclusion.
+        - Keyword density: 1–2% — use naturally, never stuff.
+        - Use LSI (semantically related) keywords throughout body paragraphs.
+        - Use **bold** to highlight the primary keyword on first use in the body.
+
+        ══ CONTENT QUALITY RULES ══
+        - Write in {style.lower()} tone, first-person perspective where it adds authenticity.
+        - Every section must deliver genuine value — no filler, no padding.
+        - Include specific facts, numbers, or actionable tips in each section.
+        - Use short paragraphs (3–5 sentences max) for readability.
+        - Use bullet points or numbered lists where appropriate (they get featured snippets).
+        - Use **bold** for key terms and *italic* for emphasis sparingly.
 
         {interlink_instructions}
 
-        ⚠️ Important:
-        - Do not use [1], [2] citation numbers.
-        - STRICT RULE: Do NOT add any external links, citations, or references to outside websites. {"ONLY use the internal links listed above from the provided website." if interlinks else "No external URLs are permitted anywhere in the content."}
+        ⚠️ STRICT RULES:
+        - Do NOT use [1], [2] citation numbers or academic references.
+        - {"ONLY use the internal links listed above — no other external URLs." if interlinks else "Do NOT add any external links or URLs anywhere in the content."}
+        - Do NOT use generic filler phrases like "In conclusion, as we have seen..."
         - {continuation}
 
-        Output valid Markdown.
+        Output clean, valid Markdown only. No preamble, no meta-commentary.
         """
 
-        new_content = _perplexity_call(prompt, "You are an expert content writer.", max_tokens=4000)
+        if model_variant == "B":
+            # A/B variant B: Perplexity sonar (lighter model)
+            new_content = _perplexity_call(prompt, "You are an expert SEO content writer.", max_tokens=6000, model="sonar")
+        else:
+            # A/B variant A (control): Perplexity sonar-pro
+            new_content = _perplexity_call(prompt, "You are an expert SEO content writer.", max_tokens=6000)
+
         blog_text += "\n\n" + new_content
         word_count = len(blog_text.split())
 
-    return {"blogText": blog_text.strip(), "wordCount": word_count}
+    return {"blogText": blog_text.strip(), "wordCount": word_count, "modelVariant": model_variant}
 
 
 def generate_seo_title(blog_text: str, topic: str) -> str:
     """Generate an SEO-optimised title from blog content."""
     import re
     prompt = (
-        f"Based on this blog content, generate ONE concise, catchy, SEO-friendly title for the blog post.\n"
+        f"Based on this blog content, generate ONE perfect SEO title tag for this blog post.\n"
         f"Topic: {topic}\n\n"
         f"Content preview:\n{blog_text[:1200]}\n\n"
-        f"Rules:\n"
+        f"SEO Title Rules:\n"
         f"- Return ONLY the title itself — no quotes, no explanations, no extra text.\n"
-        f"- Do NOT include character counts, numbers in parentheses, or any annotation like '(37 chars)' or '[60]'.\n"
-        f"- Do NOT start with numbers or numbering (e.g. '1.', '10 ways...').\n"
-        f"- Keep it under 65 characters naturally. Do not mention the length.\n"
-        f"- Make it compelling and keyword-rich for search engines."
+        f"- Place the PRIMARY keyword as close to the beginning of the title as possible.\n"
+        f"- Keep it between 50–60 characters (search engines truncate beyond 60).\n"
+        f"- Make it compelling and click-worthy — it appears as the clickable headline in Google results.\n"
+        f"- Do NOT include character counts, annotations like '(37 chars)', or numbering like '1.'.\n"
+        f"- Do NOT use clickbait or misleading language — accurately reflect the content.\n"
+        f"- Use a power word or number if it fits naturally (e.g. 'Best', 'Complete Guide', '7 Tips')."
     )
     try:
         raw = _perplexity_call(prompt, "You are an expert SEO copywriter.", max_tokens=60).strip()
@@ -306,9 +346,13 @@ def generate_image_text(blog_text: str, topic: str) -> str:
 
 def openai_generate_keywords(topic: str) -> str:
     """Fallback keyword generation via OpenAI GPT-4o."""
-    prompt = f'Generate 5-10 relevant SEO keywords for "{topic}" as a comma-separated list.'
+    prompt = (
+        f'You are an SEO keyword research expert. For the topic "{topic}", generate 8–12 high-value keywords.\n'
+        f'Include: 1 primary keyword (exact match), 3–4 long-tail variations (3+ words), 2–3 LSI/semantic keywords, 1–2 question-based keywords (e.g. "how to...", "what is...").\n'
+        f'Return ONLY a comma-separated list of keywords. No explanations, no numbering, no headers.'
+    )
     try:
-        return _openai_chat_call(prompt, "You are an SEO expert.", max_tokens=100)
+        return _openai_chat_call(prompt, "You are an SEO expert.", max_tokens=200)
     except Exception as e:
         print(f"OpenAI keyword error: {e}")
         return ""
@@ -346,28 +390,55 @@ def openai_generate_blog_content(
         ═════════════════════════════════════════
         """
 
+    primary_keyword = keywords.split(",")[0].strip() if keywords else topic
+
     prompt = f"""
-    You are a professional human blogger who writes helpful, experience-driven articles.
-    Write an engaging blog for {audience} in {language} on "{topic}".
+    You are an expert SEO content writer and professional blogger. Your goal is to write a comprehensive, high-ranking blog post that dominates search engine results pages (SERPs).
 
-    Keywords to include: {keywords or "none"}.
-    Style: {style}.
-    Minimum Words: {length_num}.
+    TOPIC: "{topic}"
+    PRIMARY KEYWORD: "{primary_keyword}"
+    ALL KEYWORDS TO USE: {keywords or "none"}
+    TARGET AUDIENCE: {audience}
+    LANGUAGE: {language}
+    WRITING STYLE: {style}
+    MINIMUM WORD COUNT: {length_num}
 
-    CONTENT REQUIREMENTS:
-    - Write in first person, sharing real-experience style insights.
-    - Tone: friendly, conversational, easy to understand. Avoid jargon.
-    - Structure: Hooking Introduction, 4–6 main sections, Conclusion with CTA.
-    - Use Markdown format: ## for main sections, ### for subsections, **bold**, *italic*.
+    ══ SEO STRUCTURE REQUIREMENTS ══
+    Use this exact heading hierarchy:
+    # [H1: Include primary keyword near the beginning — this is the page title]
+    ## [H2: Main section headings — include keyword variations]
+    ### [H3: Subsection headings — include LSI keywords]
+
+    MANDATORY ARTICLE STRUCTURE:
+    1. **H1 Title** — Primary keyword within first 5 words
+    2. **Intro paragraph (100–150 words)** — Include the primary keyword in the very first sentence. Hook the reader with a compelling question or statistic. Briefly state what the reader will learn.
+    3. **4–6 H2 sections** — Each covering a distinct, valuable subtopic. Begin each section with a keyword-rich sentence.
+    4. **FAQ Section (H2: "Frequently Asked Questions")** — Add 3–5 Q&A pairs targeting "People Also Ask" queries related to "{topic}". Format: ### Question\\n Answer paragraph.
+    5. **Conclusion with CTA (H2: "Final Thoughts" or "Conclusion")** — Summarise key takeaways, restate the primary keyword, and end with a clear call-to-action.
+
+    ══ KEYWORD PLACEMENT RULES (CRITICAL FOR SEO) ══
+    - Primary keyword must appear in: the H1 title, first paragraph (within first 100 words), at least 2 H2 headings, and the conclusion.
+    - Keyword density: 1–2% — use naturally, never stuff.
+    - Use LSI (semantically related) keywords throughout body paragraphs.
+    - Use **bold** to highlight the primary keyword on first use in the body.
+
+    ══ CONTENT QUALITY RULES ══
+    - Write in {style.lower()} tone, first-person perspective where it adds authenticity.
+    - Every section must deliver genuine value — no filler, no padding.
+    - Include specific facts, numbers, or actionable tips in each section.
+    - Use short paragraphs (3–5 sentences max) for readability.
+    - Use bullet points or numbered lists where appropriate (they get featured snippets).
+    - Use **bold** for key terms and *italic* for emphasis sparingly.
 
     {interlink_instructions}
 
-    ⚠️ Important:
-    - Do not use [1], [2] citation numbers.
-    - STRICT RULE: Do NOT add any external links, citations, or references to outside websites. {"ONLY use the internal links listed above from the provided website." if interlinks else "No external URLs are permitted anywhere in the content."}
+    ⚠️ STRICT RULES:
+    - Do NOT use [1], [2] citation numbers or academic references.
+    - {"ONLY use the internal links listed above — no other external URLs." if interlinks else "Do NOT add any external links or URLs anywhere in the content."}
+    - Do NOT use generic filler phrases like "In conclusion, as we have seen..."
     """
 
-    blog_text = _openai_chat_call(prompt, "You are an expert content writer.", max_tokens=4000)
+    blog_text = _openai_chat_call(prompt, "You are an expert SEO content writer.", max_tokens=6000)
     return {"blogText": blog_text.strip(), "wordCount": len(blog_text.split())}
 
 
@@ -471,17 +542,64 @@ def generate_image(topic: str, image_text: str) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def format_markdown_to_html(text: str) -> str:
-    """Convert Markdown blog text to basic HTML."""
+    """Convert Markdown blog text to semantic HTML."""
     import re
     html = text
-    html = re.sub(r'^## (.+)$', r'<h2>\1</h2>', html, flags=re.MULTILINE)
-    html = re.sub(r'^### (.+)$', r'<h3>\1</h3>', html, flags=re.MULTILINE)
+
+    # Strip any leading/trailing whitespace
+    html = html.strip()
+
+    # Headings — order matters: longest prefix first to avoid partial matches
+    html = re.sub(r'^#### (.+)$', r'<h4>\1</h4>', html, flags=re.MULTILINE)
+    html = re.sub(r'^### (.+)$',  r'<h3>\1</h3>',  html, flags=re.MULTILINE)
+    html = re.sub(r'^## (.+)$',   r'<h2>\1</h2>',   html, flags=re.MULTILINE)
+    # H1: convert to <h1> and strip any stray leading '#' that wasn't converted
+    html = re.sub(r'^# (.+)$',    r'<h1>\1</h1>',    html, flags=re.MULTILINE)
+
+    # Inline formatting
     html = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', html)
-    html = re.sub(r'\*(.+?)\*', r'<em>\1</em>', html)
+    html = re.sub(r'\*(.+?)\*',     r'<em>\1</em>',         html)
+
+    # Hyperlinks
     html = re.sub(
         r'\[([^\]]+)\]\(([^)]+)\)',
         r'<a href="\2" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: underline;">\1</a>',
         html,
     )
-    html = re.sub(r'\n{2,}', '</p><p>', html)
-    return '<p>' + html + '</p>'
+
+    # Bullet lists: convert lines starting with "- " or "* " into <ul><li> blocks
+    def _replace_list_block(m):
+        items = re.sub(r'^[-*] (.+)$', r'<li>\1</li>', m.group(0), flags=re.MULTILINE)
+        return f'<ul>{items}</ul>'
+    html = re.sub(r'(^[-*] .+$\n?)+', _replace_list_block, html, flags=re.MULTILINE)
+
+    # Numbered lists: convert lines starting with "1. " "2. " etc.
+    def _replace_ol_block(m):
+        items = re.sub(r'^\d+\. (.+)$', r'<li>\1</li>', m.group(0), flags=re.MULTILINE)
+        return f'<ol>{items}</ol>'
+    html = re.sub(r'(^\d+\. .+$\n?)+', _replace_ol_block, html, flags=re.MULTILINE)
+
+    # Wrap remaining plain-text blocks in <p> tags (skip lines that are already block tags)
+    block_tags = re.compile(r'^<(h[1-6]|ul|ol|li|blockquote|pre|div)', re.IGNORECASE)
+    lines = html.split('\n')
+    result = []
+    buffer = []
+
+    def flush_buffer():
+        chunk = ' '.join(buffer).strip()
+        if chunk:
+            result.append(f'<p>{chunk}</p>')
+        buffer.clear()
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            flush_buffer()
+        elif block_tags.match(stripped):
+            flush_buffer()
+            result.append(stripped)
+        else:
+            buffer.append(stripped)
+
+    flush_buffer()
+    return '\n'.join(result)

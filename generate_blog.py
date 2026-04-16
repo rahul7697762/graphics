@@ -189,9 +189,13 @@ CRITICAL CONSTRAINT:
 
 def format_html(text):
     import re
-    html = text
-    html = re.sub(r'^## (.+)$', r'<h2>\g<1></h2>', html, flags=re.MULTILINE)
-    html = re.sub(r'^### (.+)$', r'<h3>\g<1></h3>', html, flags=re.MULTILINE)
+    html = text.strip()
+    # Headings — longest prefix first
+    html = re.sub(r'^#### (.+)$', r'<h4>\g<1></h4>', html, flags=re.MULTILINE)
+    html = re.sub(r'^### (.+)$',  r'<h3>\g<1></h3>',  html, flags=re.MULTILINE)
+    html = re.sub(r'^## (.+)$',   r'<h2>\g<1></h2>',   html, flags=re.MULTILINE)
+    html = re.sub(r'^# (.+)$',    r'<h1>\g<1></h1>',    html, flags=re.MULTILINE)
+    # Inline
     html = re.sub(r'\*\*(.+?)\*\*', r'<strong>\g<1></strong>', html)
     html = re.sub(r'\*(.+?)\*', r'<em>\g<1></em>', html)
     html = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\g<2>" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: underline;">\g<1></a>', html)
